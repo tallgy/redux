@@ -135,6 +135,9 @@ export function createStore<
       )
     }
 
+    // 通过 柯里化 实现中间件效果
+    // 需要将 createStore 作为参数传递的原因，
+    // 可能是考虑 用户自身去决定调用时间。
     return enhancer(createStore)(
       reducer,
       preloadedState as PreloadedState | undefined
@@ -151,9 +154,11 @@ export function createStore<
   let isDispatching = false
 
   /**
+   * 这是currentListeners的浅拷贝，因此我们可以在分派时使用nextListeners作为临时列表。
    * This makes a shallow copy of currentListeners so we can use
    * nextListeners as a temporary list while dispatching.
    *
+   * 这可以防止在分派过程中围绕消费者调用订阅/退订的任何错误。
    * This prevents any bugs around consumers calling
    * subscribe/unsubscribe in the middle of a dispatch.
    */
@@ -167,12 +172,18 @@ export function createStore<
   }
 
   /**
+   * 读取由存储管理的状态树。
    * Reads the state tree managed by the store.
    *
    * @returns The current state tree of your application.
+   * 应用程序的当前状态树。
    */
   function getState(): S {
+    // 如果处于 调度 状态，抛出异常，
     if (isDispatching) {
+      // 在reducer执行时不能调用store.getState()。
+      // 减速器已经接收到状态作为参数。
+      // 将它从顶部的reducer传递下来，而不是从store中读取。
       throw new Error(
         'You may not call store.getState() while the reducer is executing. ' +
           'The reducer has already received the state as an argument. ' +
@@ -184,27 +195,36 @@ export function createStore<
   }
 
   /**
+   * 添加更改侦听器。它将在任何时候调用一个动作，并且状态树的某些部分可能已经改变。
+   * 然后，您可以调用getState()来读取回调内部的当前状态树。
    * Adds a change listener. It will be called any time an action is dispatched,
    * and some part of the state tree may potentially have changed. You may then
    * call `getState()` to read the current state tree inside the callback.
    *
+   * 您可以从更改侦听器调用`dispatch() `，但需要注意以下事项:
    * You may call `dispatch()` from a change listener, with the following
    * caveats:
    *
+   * 1. 订阅在每次 dispatch() `调用之前被快照。
+   * 如果在调用侦听器时订阅或取消订阅，这将不会对当前正在进行的' dispatch() '产生任何影响。
+   * 但是，下一个' dispatch() '调用，无论是否嵌套，都将使用订阅列表的最新快照。
    * 1. The subscriptions are snapshotted just before every `dispatch()` call.
    * If you subscribe or unsubscribe while the listeners are being invoked, this
    * will not have any effect on the `dispatch()` that is currently in progress.
    * However, the next `dispatch()` call, whether nested or not, will use a more
    * recent snapshot of the subscription list.
    *
+   * 2. 侦听器不应该期望看到所有的状态变化，
+   * 因为在调用侦听器之前，状态可能已经在嵌套的' dispatch()期间被更新了多次。
+   * 但是，可以保证在' dispatch() '启动之前注册的所有订阅者都将在它退出时以最新状态调用。
    * 2. The listener should not expect to see all state changes, as the state
    * might have been updated multiple times during a nested `dispatch()` before
    * the listener is called. It is, however, guaranteed that all subscribers
    * registered before the `dispatch()` started will be called with the latest
    * state by the time it exits.
    *
-   * @param listener A callback to be invoked on every dispatch.
-   * @returns A function to remove this change listener.
+   * @param listener A callback to be invoked on every dispatch. 每次分派时调用的回调。
+   * @returns A function to remove this change listener. 用于删除此更改侦听器的函数。
    */
   function subscribe(listener: () => void) {
     if (typeof listener !== 'function') {
@@ -244,34 +264,57 @@ export function createStore<
 
       isSubscribed = false
 
+      // 通过这个，更新了 next
       ensureCanMutateNextListeners()
+      // TODO
+      // 这里没有理解清楚 next 和 current 两个的区别点
+      // 为什么 currentListeners 要直接设置为 null
       nextListeners.delete(listenerId)
       currentListeners = null
     }
   }
 
   /**
+   * 判断是否为普通对象、type是否正确，是否处于正在 dispatching 阶段
+   * 调用 reducer 进行更新 调用 listeners 方法，
+   * 同时将 nextListeners 赋值给 currentListeners
+   * return action
+   * 
+   * 分派一个动作。这是触发状态变化的唯一方法。
    * Dispatches an action. It is the only way to trigger a state change.
    *
+   * 用于创建存储的“reducer”函数将使用当前状态树和给定的“action”来调用。
+   * 它的返回值将被视为树的下一个状态，并且将通知更改侦听器。
    * The `reducer` function, used to create the store, will be called with the
    * current state tree and the given `action`. Its return value will
    * be considered the **next** state of the tree, and the change listeners
    * will be notified.
    *
+   * 基本实现只支持普通对象操作。
+   * 如果你想分派一个Promise、一个Observable、一个object或其他东西，
+   * 你需要把你的store创建函数封装到相应的中间件中。
+   * 例如，请参阅' redux-thunk '包的文档。甚至中间件最终也会使用此方法分派普通对象操作。
    * The base implementation only supports plain object actions. If you want to
    * dispatch a Promise, an Observable, a thunk, or something else, you need to
    * wrap your store creating function into the corresponding middleware. For
    * example, see the documentation for the `redux-thunk` package. Even the
    * middleware will eventually dispatch plain object actions using this method.
    *
+   * 一个表示“发生了什么变化”的普通对象。
+   * 保持动作序列化是个好主意，这样你就可以记录和回放用户会话，或者使用时间旅行' redux-devtools'。
+   * 一个动作必须有一个type属性，这个属性不能是undefined。
+   * 对动作类型使用字符串常量是个好主意。
    * @param action A plain object representing “what changed”. It is
    * a good idea to keep actions serializable so you can record and replay user
    * sessions, or use the time travelling `redux-devtools`. An action must have
    * a `type` property which may not be `undefined`. It is a good idea to use
    * string constants for action types.
    *
+   * 为方便起见，使用您分派的同一个操作对象。
    * @returns For convenience, the same action object you dispatched.
    *
+   * 注意，如果你使用自定义中间件，
+   * 它可能会包装' dispatch() '来返回其他东西(例如，一个你可以等待的Promise)。
    * Note that, if you use a custom middleware, it may wrap `dispatch()` to
    * return something else (for example, a Promise you can await).
    */
@@ -317,13 +360,17 @@ export function createStore<
   }
 
   /**
+   * 替换当前store用来计算状态的reducer。
    * Replaces the reducer currently used by the store to calculate the state.
    *
+   * 如果你的应用实现了代码分割，并且你想动态加载一些reducer，
+   * 你可能需要这个。如果要为Redux实现热重新加载机制，可能还需要这个。
    * You might need this if your app implements code splitting and you want to
    * load some of the reducers dynamically. You might also need this if you
    * implement a hot reloading mechanism for Redux.
    *
    * @param nextReducer The reducer for the store to use instead.
+   * 商店使用的减速器。
    */
   function replaceReducer(nextReducer: Reducer<S, A>): void {
     if (typeof nextReducer !== 'function') {
@@ -336,10 +383,14 @@ export function createStore<
 
     currentReducer = nextReducer as unknown as Reducer<S, A, PreloadedState>
 
+    // 这个动作的效果与ActionTypes.INIT类似。
+    // 在新旧rootReducer中同时存在的任何reducer都将接收到以前的状态。
+    // 这将有效地用旧状态树中的任何相关数据填充新的状态树。
     // This action has a similar effect to ActionTypes.INIT.
     // Any reducers that existed in both the new and old rootReducer
     // will receive the previous state. This effectively populates
     // the new state tree with any relevant data from the old one.
+    // TODO 这里传参的作用是什么，因为本质 dispatch 的type 都是自己的
     dispatch({ type: ActionTypes.REPLACE } as A)
   }
 

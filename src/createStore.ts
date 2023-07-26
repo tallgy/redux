@@ -16,22 +16,29 @@ import { kindOf } from './utils/kindOf'
 /**
  * @deprecated
  *
+ * 我们建议使用' @reduxjs/toolkit '包**中的' configureStore '方法来代替' createStore '。
  * **We recommend using the `configureStore` method
  * of the `@reduxjs/toolkit` package**, which replaces `createStore`.
  *
+ * Redux Toolkit是我们目前推荐的编写Redux逻辑的方法，包括存储设置、reducer、数据获取等。
  * Redux Toolkit is our recommended approach for writing Redux logic today,
  * including store setup, reducers, data fetching, and more.
  *
  * **For more details, please read this Redux docs page:**
  * **https://redux.js.org/introduction/why-rtk-is-redux-today**
  *
+ * Redux Toolkit中的“configureStore”是“createStore”的改进版本，它简化了设置并有助于避免常见错误。
  * `configureStore` from Redux Toolkit is an improved version of `createStore` that
  * simplifies setup and helps avoid common bugs.
  *
+ * 今天你不应该单独使用' redux '核心包，除非是为了学习目的。
+ * 核心' redux '包中的' createStore '方法不会被删除，
+ * 但我们鼓励所有用户迁移到使用redux工具包来处理所有redux代码。
  * You should not be using the `redux` core package by itself today, except for learning purposes.
  * The `createStore` method from the core `redux` package will not be removed, but we encourage
  * all users to migrate to using Redux Toolkit for all Redux code.
  *
+ * 如果你想使用' createStore '而不出现这种可视化的弃用警告，请使用' legacy_createStore '导入:
  * If you want to use `createStore` without this visual deprecation warning, use
  * the `legacy_createStore` import instead:
  *
@@ -109,10 +116,11 @@ export function createStore<
     throw new Error(
       'It looks like you are passing several store enhancers to ' +
         'createStore(). This is not supported. Instead, compose them ' +
-        'together to a single function. See https://redux.js.org/tutorials/fundamentals/part-4-store#creating-a-store-with-enhancers for an example.'
+        'together to a single function. See `https://redux.js.org/tutorials/fundamentals/part-4-store#creating-a-store-with-enhancers` for an example.'
     )
   }
 
+  // 会将 preloadedState 方法赋值给 enhancer 因为 preloadeState 也是一个 state。
   if (typeof preloadedState === 'function' && typeof enhancer === 'undefined') {
     enhancer = preloadedState as StoreEnhancer<Ext, StateExt>
     preloadedState = undefined

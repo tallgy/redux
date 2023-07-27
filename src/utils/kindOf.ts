@@ -1,4 +1,5 @@
 // Inlined / shortened version of `kindOf` from https://github.com/jonschlinkert/kind-of
+// 判断类型
 export function miniKindOf(val: any): string {
   if (val === void 0) return 'undefined'
   if (val === null) return 'null'

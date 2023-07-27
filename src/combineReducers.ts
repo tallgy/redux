@@ -11,58 +11,15 @@ import isPlainObject from './utils/isPlainObject'
 import warning from './utils/warning'
 import { kindOf } from './utils/kindOf'
 
-function getUnexpectedStateShapeWarningMessage(
-  inputState: object,
-  reducers: { [key: string]: Reducer<any, any, any> },
-  action: Action,
-  unexpectedKeyCache: { [key: string]: true }
-) {
-  const reducerKeys = Object.keys(reducers)
-  const argumentName =
-    action && action.type === ActionTypes.INIT
-      ? 'preloadedState argument passed to createStore'
-      : 'previous state received by the reducer'
-
-  if (reducerKeys.length === 0) {
-    return (
-      'Store does not have a valid reducer. Make sure the argument passed ' +
-      'to combineReducers is an object whose values are reducers.'
-    )
-  }
-
-  if (!isPlainObject(inputState)) {
-    return (
-      `The ${argumentName} has unexpected type of "${kindOf(
-        inputState
-      )}". Expected argument to be an object with the following ` +
-      `keys: "${reducerKeys.join('", "')}"`
-    )
-  }
-
-  const unexpectedKeys = Object.keys(inputState).filter(
-    key => !reducers.hasOwnProperty(key) && !unexpectedKeyCache[key]
-  )
-
-  unexpectedKeys.forEach(key => {
-    unexpectedKeyCache[key] = true
-  })
-
-  if (action && action.type === ActionTypes.REPLACE) return
-
-  if (unexpectedKeys.length > 0) {
-    return (
-      `Unexpected ${unexpectedKeys.length > 1 ? 'keys' : 'key'} ` +
-      `"${unexpectedKeys.join('", "')}" found in ${argumentName}. ` +
-      `Expected to find one of the known reducer keys instead: ` +
-      `"${reducerKeys.join('", "')}". Unexpected keys will be ignored.`
-    )
-  }
-}
-
+/**
+ * 判断 reducer 是否存在 默认状态数据
+ * @param reducers 
+ */
 function assertReducerShape(reducers: {
   [key: string]: Reducer<any, any, any>
 }) {
   Object.keys(reducers).forEach(key => {
+    // 取出当前 reducer
     const reducer = reducers[key]
     const initialState = reducer(undefined, { type: ActionTypes.INIT })
 
@@ -94,6 +51,8 @@ function assertReducerShape(reducers: {
 }
 
 /**
+ * combineReducers 辅助函数的作用是，把一个由多个不同 reducer 函数作为 value 的
+ * object，合并成一个最终的 reducer 函数，然后就可以对这个 reducer 调用 createStore。
  * Turns an object whose values are different reducer functions, into a single
  * reducer function. It will call every child reducer, and gather their results
  * into a single state object, whose keys correspond to the keys of the passed
@@ -111,41 +70,20 @@ function assertReducerShape(reducers: {
  * @returns A reducer function that invokes every reducer inside the passed
  *   object, and builds a state object with the same shape.
  */
-export default function combineReducers<M>(
-  reducers: M
-): M[keyof M] extends Reducer<any, any, any> | undefined
-  ? Reducer<
-      StateFromReducersMapObject<M>,
-      ActionFromReducersMapObject<M>,
-      Partial<PreloadedStateShapeFromReducersMapObject<M>>
-    >
-  : never
 export default function combineReducers(reducers: {
   [key: string]: Reducer<any, any, any>
 }) {
   const reducerKeys = Object.keys(reducers)
   const finalReducers: { [key: string]: Reducer<any, any, any> } = {}
+  // 对 reducers 做一层过滤
   for (let i = 0; i < reducerKeys.length; i++) {
     const key = reducerKeys[i]
-
-    if (process.env.NODE_ENV !== 'production') {
-      if (typeof reducers[key] === 'undefined') {
-        warning(`No reducer provided for key "${key}"`)
-      }
-    }
 
     if (typeof reducers[key] === 'function') {
       finalReducers[key] = reducers[key]
     }
   }
   const finalReducerKeys = Object.keys(finalReducers)
-
-  // This is used to make sure we don't warn about the same
-  // keys multiple times.
-  let unexpectedKeyCache: { [key: string]: true }
-  if (process.env.NODE_ENV !== 'production') {
-    unexpectedKeyCache = {}
-  }
 
   let shapeAssertionError: unknown
   try {
@@ -162,40 +100,27 @@ export default function combineReducers(reducers: {
       throw shapeAssertionError
     }
 
-    if (process.env.NODE_ENV !== 'production') {
-      const warningMessage = getUnexpectedStateShapeWarningMessage(
-        state,
-        finalReducers,
-        action,
-        unexpectedKeyCache
-      )
-      if (warningMessage) {
-        warning(warningMessage)
-      }
-    }
-
     let hasChanged = false
     const nextState: StateFromReducersMapObject<typeof reducers> = {}
     for (let i = 0; i < finalReducerKeys.length; i++) {
       const key = finalReducerKeys[i]
       const reducer = finalReducers[key]
+      // 这里 state[key] 可能会没有
       const previousStateForKey = state[key]
+      // 这里就会进入 默认值状态
       const nextStateForKey = reducer(previousStateForKey, action)
+      // 代表默认没有时也需要存在 initState
       if (typeof nextStateForKey === 'undefined') {
-        const actionType = action && action.type
-        throw new Error(
-          `When called with an action of type ${
-            actionType ? `"${String(actionType)}"` : '(unknown type)'
-          }, the slice reducer for key "${key}" returned undefined. ` +
-            `To ignore an action, you must explicitly return the previous state. ` +
-            `If you want this reducer to hold no value, you can return null instead of undefined.`
-        )
+        throw new Error()
       }
+      // 将数据放进去
       nextState[key] = nextStateForKey
+      // 代表判断是否两次的值是否发生了变化。
       hasChanged = hasChanged || nextStateForKey !== previousStateForKey
     }
     hasChanged =
       hasChanged || finalReducerKeys.length !== Object.keys(state).length
+    // 判断是否发生了 change
     return hasChanged ? nextState : state
   }
 }

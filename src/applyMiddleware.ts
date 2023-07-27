@@ -3,59 +3,19 @@ import { Middleware, MiddlewareAPI } from './types/middleware'
 import { StoreEnhancer, Dispatch } from './types/store'
 
 /**
- * Creates a store enhancer that applies middleware to the dispatch method
- * of the Redux store. This is handy for a variety of tasks, such as expressing
- * asynchronous actions in a concise manner, or logging every action payload.
- *
- * See `redux-thunk` package as an example of the Redux middleware.
- *
- * Because middleware is potentially asynchronous, this should be the first
- * store enhancer in the composition chain.
- *
- * Note that each middleware will be given the `dispatch` and `getState` functions
- * as named arguments.
- *
- * @param middlewares The middleware chain to be applied.
- * @returns A store enhancer applying the middleware.
- *
- * @template Ext Dispatch signature added by a middleware.
- * @template S The type of the state supported by a middleware.
+ * 中间件思路
+ * applyMiddleware 通过 enhancer 的调用 返回的 store 和 dispatch
+ * 内部实现一个 dispatch 去进行覆盖了 store 的 dispatch
+ * dispatch 主要是一个 调用了 中间件的 返回的方法，逆向执行针对 store.dispatch 
+ * 的调用，执行后的返回结果。
  */
-export default function applyMiddleware(): StoreEnhancer
-export default function applyMiddleware<Ext1, S>(
-  middleware1: Middleware<Ext1, S, any>
-): StoreEnhancer<{ dispatch: Ext1 }>
-export default function applyMiddleware<Ext1, Ext2, S>(
-  middleware1: Middleware<Ext1, S, any>,
-  middleware2: Middleware<Ext2, S, any>
-): StoreEnhancer<{ dispatch: Ext1 & Ext2 }>
-export default function applyMiddleware<Ext1, Ext2, Ext3, S>(
-  middleware1: Middleware<Ext1, S, any>,
-  middleware2: Middleware<Ext2, S, any>,
-  middleware3: Middleware<Ext3, S, any>
-): StoreEnhancer<{ dispatch: Ext1 & Ext2 & Ext3 }>
-export default function applyMiddleware<Ext1, Ext2, Ext3, Ext4, S>(
-  middleware1: Middleware<Ext1, S, any>,
-  middleware2: Middleware<Ext2, S, any>,
-  middleware3: Middleware<Ext3, S, any>,
-  middleware4: Middleware<Ext4, S, any>
-): StoreEnhancer<{ dispatch: Ext1 & Ext2 & Ext3 & Ext4 }>
-export default function applyMiddleware<Ext1, Ext2, Ext3, Ext4, Ext5, S>(
-  middleware1: Middleware<Ext1, S, any>,
-  middleware2: Middleware<Ext2, S, any>,
-  middleware3: Middleware<Ext3, S, any>,
-  middleware4: Middleware<Ext4, S, any>,
-  middleware5: Middleware<Ext5, S, any>
-): StoreEnhancer<{ dispatch: Ext1 & Ext2 & Ext3 & Ext4 & Ext5 }>
-export default function applyMiddleware<Ext, S = any>(
-  ...middlewares: Middleware<any, S, any>[]
-): StoreEnhancer<{ dispatch: Ext }>
 export default function applyMiddleware(
   ...middlewares: Middleware[]
 ): StoreEnhancer<any> {
   return createStore => (reducer, preloadedState) => {
     const store = createStore(reducer, preloadedState)
     let dispatch: Dispatch = () => {
+      // 不允许在构造中间件时进行调度。其他中间件不会应用于此分派。
       throw new Error(
         'Dispatching while constructing your middleware is not allowed. ' +
           'Other middleware would not be applied to this dispatch.'

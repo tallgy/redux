@@ -172,6 +172,7 @@ export function createStore<
   }
 
   /**
+   * 很简单，就是返回 currentState
    * 读取由存储管理的状态树。
    * Reads the state tree managed by the store.
    *
@@ -264,7 +265,7 @@ export function createStore<
 
       isSubscribed = false
 
-      // 通过这个，更新了 next
+      // 通过这个，判断是否需要再次更新 next
       ensureCanMutateNextListeners()
       // TODO
       // 这里没有理解清楚 next 和 current 两个的区别点
@@ -275,10 +276,11 @@ export function createStore<
   }
 
   /**
-   * 判断是否为普通对象、type是否正确，是否处于正在 dispatching 阶段
+   * 判断是否为普通对象、type是否是字符串，是否处于正在 isDispatching 阶段
    * 调用 reducer 进行更新 调用 listeners 方法，
    * 同时将 nextListeners 赋值给 currentListeners
    * return action
+   * 
    * 
    * 分派一个动作。这是触发状态变化的唯一方法。
    * Dispatches an action. It is the only way to trigger a state change.
@@ -319,6 +321,7 @@ export function createStore<
    * return something else (for example, a Promise you can await).
    */
   function dispatch(action: A) {
+    // 是否是普通对象判断
     if (!isPlainObject(action)) {
       throw new Error(
         `Actions must be plain objects. Instead, the actual type was: '${kindOf(
@@ -438,6 +441,8 @@ export function createStore<
     }
   }
 
+  // 当一个存储被创建时，一个“INIT”动作被调度，
+  // 以便每个reducer返回它们的初始状态。这有效地填充了初始状态树。
   // When a store is created, an "INIT" action is dispatched so that every
   // reducer returns their initial state. This effectively populates
   // the initial state tree.

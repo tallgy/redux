@@ -1,5 +1,5 @@
 /**
- * 从右到左，一次生成的 柯里化函数
+ * 从右到左，一次生成的 洋葱模型函数
  * 重点是使用 reduce 进行循环调用到结束
  */
 export default function compose<R>(...funcs: Function[]): (...args: any[]) => R
